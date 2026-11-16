@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather Archive · CoolCode</title>
+<meta name="description" content="Compare Canadian station weather observations and climate normals by date.">
+<link rel="stylesheet" href="./style.css">
+<script type="module" src="./app.mjs"></script>
+</head>
+<body>
+<header class="top"><div><a href="https://coolcode.ca/">CoolCode</a><a href="https://eccc-msc.github.io/open-data/msc-data/climate_obs/readme_climateobs-geomet_en/">ECCC data guide ↗</a></div></header>
+<main>
+<section class="intro"><h1>Weather Archive</h1><p>Compare recorded weather at two Canadian stations. Pick a trip, a storm, or a stretch you remember, and see what the instruments captured.</p></section>
+<section class="panel" aria-labelledby="search-title">
+<h2 id="search-title">Compare observations</h2>
+<form id="compare">
+<div class="fields">
+<label>Station A climate ID <input id="station-a" value="1104570" maxlength="7" pattern="[A-Za-z0-9]{7}" required></label>
+<label>Station B climate ID <input id="station-b" value="8202251" maxlength="7" pattern="[A-Za-z0-9]{7}"></label>
+<label>Start date <input id="start" type="date" value="2026-08-31" required></label>
+<label>End date <input id="end" type="date" value="2026-09-18" required></label>
+</div>
+<div class="actions"><button type="submit">Compare stations</button><button type="button" class="secondary" id="example">Langley and Halifax trip</button><button type="button" class="secondary" id="historical">Halifax and Vancouver · 2009</button></div>
+<p class="quiet">Use one or two stations and up to 92 days. Daily coverage and measurements vary by station.</p>
+</form>
+<details id="finder">
+<summary>Find a station by location</summary>
+<form id="nearby">
+<div class="actions locations"><button type="button" class="secondary" data-point="49.1044,-122.6603">Langley</button><button type="button" class="secondary" data-point="44.6488,-63.5752">Halifax</button><button type="button" class="secondary" data-point="49.2827,-123.1207">Vancouver</button></div>
+<div class="fields"><label>Latitude <input type="number" step="any" min="-90" max="90" id="lat" value="49.1044" required></label><label>Longitude <input type="number" step="any" min="-180" max="180" id="lon" value="-122.6603" required></label></div>
+<div class="actions"><button type="submit">Find nearby stations</button></div>
+</form>
+<p role="status" id="finder-status" class="quiet"></p><ul id="stations"></ul>
+</details>
+</section>
+<p id="status" role="status">Choose a date range and compare.</p>
+<section id="results" hidden aria-labelledby="results-title">
+<div class="section-head"><h2 id="results-title">Station results</h2><button id="csv" class="secondary">Download observations CSV</button></div>
+<div id="summaries" class="summaries"></div>
+<section class="panel trend" aria-labelledby="trend-title"><h3 id="trend-title">Daily mean temperature</h3><canvas id="chart" role="img" aria-label="Daily mean temperatures by station. Exact readings and missing days are listed in the table."></canvas><p id="chart-detail" class="quiet"></p></section>
+<div class="panel"><h3>Daily observations</h3><div class="overflow" tabindex="0" aria-label="Daily observations table"><table id="observations"></table></div><p class="quiet">Values marked with an asterisk have a source flag. Flags and missing values are retained in the CSV.</p></div>
+</section>
+</main>
+<footer>Data from Environment and Climate Change Canada via MSC GeoMet · <a href="https://eccc-msc.github.io/open-data/licence/readme_en/">ECCC Data Services End-use Licence</a> · Site calculations and charts are derived from the source observations.</footer>
+</body>
+</html>
