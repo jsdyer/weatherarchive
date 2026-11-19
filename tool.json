@@ -1,0 +1,28 @@
+{
+  "id": "weatherarchive",
+  "title": "Weather Archive",
+  "description": "Compare up to 30 years of daily Canadian station weather, inspect monthly tables and export measurements with their flags.",
+  "category": "places",
+  "tags": [
+    "eccc",
+    "environment",
+    "climate",
+    "historical",
+    "weather",
+    "station",
+    "rainfall",
+    "snow",
+    "temperature",
+    "langley",
+    "halifax"
+  ],
+  "icon": "history",
+  "url": "/weatherarchive/",
+  "source": "https://github.com/jsdyer/weatherarchive",
+  "hosting": "project",
+  "access": "browser",
+  "data_info": {
+    "mode": "live",
+    "detail": "ECCC supplies daily records and available monthly normals. The tool follows every results page for the selected stations and dates."
+  }
+}
