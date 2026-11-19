@@ -94,6 +94,6 @@ def check(browser):
 
 if __name__ == "__main__":
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
+        browser = playwright.chromium.launch(channel="chrome")
         check(browser)
         browser.close()
