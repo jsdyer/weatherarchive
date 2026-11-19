@@ -21,6 +21,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/configure-pages@v5
+      - name: Check long ranges and daily pagination
+        run: node --test weather.test.mjs
       - name: Prepare static files
         run: |
           mkdir -p dist

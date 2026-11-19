@@ -1,4 +1,4 @@
-import {aggregate,csvFor,daysBetween,distance,fields,reading,resource,stationId,validRange} from './model.mjs';
+import {aggregate,csvFor,daysBetween,distance,fields,reading,resource,stationId,rangeProblem,collectDailyPages} from './model.mjs?v=long-ranges';
 
 const $ = id => document.getElementById(id);
 const make = (tag,text,cls) => {
@@ -17,22 +17,26 @@ let nearbyController;
 let visible = {days:[],results:[]};
 
 async function fetchItems(url, signal) {
-  const response = await fetch(url,{signal,credentials:'omit',referrerPolicy:'no-referrer'});
+  const response = await fetch(url,{signal:AbortSignal.any([signal,AbortSignal.timeout(45000)]),credentials:'omit',referrerPolicy:'no-referrer'});
   if (!response.ok) throw new Error(response.status === 429 ? 'ECCC is limiting requests. Try again shortly.' : 'ECCC returned HTTP '+response.status+'.');
   const payload = await response.json();
   if (!Array.isArray(payload.features)) throw new Error('ECCC returned an unfamiliar data format.');
   return payload;
 }
 
-async function stationResult(id,from,through,signal) {
+async function stationResult(id,from,through,signal,progress) {
   const sources = {
     station: resource('climate-stations',{CLIMATE_IDENTIFIER:id}),
-    daily: resource('climate-daily',{CLIMATE_IDENTIFIER:id,datetime:from+'/'+through,limit:'100'}),
+    daily: resource('climate-daily',{CLIMATE_IDENTIFIER:id,datetime:from+'/'+through,limit:'500',sortby:'LOCAL_DATE'}),
     normal: resource('climate-normals',{CLIMATE_IDENTIFIER:id,NORMAL_ID:'1',limit:'100'}),
   };
-  const [station,daily,normal] = await Promise.allSettled(Object.values(sources).map(url=>fetchItems(url,signal)));
+  const [station,daily,normal] = await Promise.allSettled([
+    fetchItems(sources.station,signal),
+    collectDailyPages(sources.daily,url=>fetchItems(url,signal),progress),
+    fetchItems(sources.normal,signal),
+  ]);
   const observed = new Map();
-  for (const {properties:row} of daily.value?.features || []) {
+  for (const {properties:row} of daily.value || []) {
     const date = dateLabel(row.LOCAL_DATE);
     if (row.CLIMATE_IDENTIFIER === id && date >= from && date <= through) observed.set(date,row);
   }
@@ -46,7 +50,7 @@ async function stationResult(id,from,through,signal) {
     }
   }
   return {id,name,metadata,observed,normals,sources,
-    error: daily.reason?.message, normalError:normal.status === 'rejected'};
+    error: daily.status === 'rejected' ? 'Daily download failed. '+(daily.reason?.message || 'Please try again.') : null, normalError:normal.status === 'rejected'};
 }
 
 function renderSummary(result,days,index) {
@@ -136,13 +140,31 @@ function updateChart() {
 function render(days,results) {
   visible = {days,results};
   $('summaries').replaceChildren(...results.map((result,index)=>renderSummary(result,days,index)));
+  const months = [...new Set(days.map(date=>date.slice(0,7)))];
+  $('daily-month').replaceChildren(...months.map(month=>new Option(month,month)));
+  renderTable();
+  $('results').hidden = false;
+  $('csv').disabled = !results.some(result=>result.observed.size);
+  const measured = results.reduce((total,result)=> total+[...result.observed.values()].filter(row=>fields.some(([key])=>reading(row[key])!==null)).length,0);
+  const failed = results.filter(result=>result.error);
+  if (failed.length) {
+    $('status').textContent = 'Daily download failed for '+failed.map(result=>result.name).join(', ')+'. Retry the comparison. '+(measured ? measured+' station-days have measurements in the completed download.' : '');
+    $('csv').disabled = true;
+  } else $('status').textContent = measured
+    ? measured+' of '+days.length*results.length+' station-days have at least one measurement in the selected fields.'
+    : 'No daily measurements were returned. Check station coverage below or choose a different date range.';
+  updateChart();
+}
+
+function renderTable() {
+  const {days,results} = visible;
   const cols = ['Date','Station',...fields.map(([,label])=>label)];
   const header = make('thead');
   const headings = make('tr');
   for (const col of cols) headings.append(Object.assign(make('th',col),{scope:'col'}));
   header.append(headings);
   const body = make('tbody');
-  for (const day of days) {
+  for (const day of days.filter(value=>value.startsWith($('daily-month').value))) {
     for (const result of results) {
       const row = make('tr');
       const data = result.observed.get(day) || {};
@@ -155,13 +177,6 @@ function render(days,results) {
     }
   }
   $('observations').replaceChildren(header,body);
-  $('results').hidden = false;
-  $('csv').disabled = !results.some(result=>result.observed.size);
-  const measured = results.reduce((total,result)=> total+[...result.observed.values()].filter(row=>fields.some(([key])=>reading(row[key])!==null)).length,0);
-  $('status').textContent = measured
-    ? measured+' of '+days.length*results.length+' station-days have at least one measurement in the selected fields.'
-    : 'No daily measurements were returned. Check station coverage below or choose a different date range.';
-  updateChart();
 }
 
 async function compare() {
@@ -169,26 +184,33 @@ async function compare() {
   const b = $('station-b').value.trim().toUpperCase();
   const from = $('start').value;
   const through = $('end').value;
-  if (!stationId(a) || (b && !stationId(b)) || !validRange(from,through)) {
-    $('status').textContent = 'Enter a seven-character climate ID and a valid range of up to 92 days.';
+  const problem = !stationId(a) ? 'Station A needs its seven-character ECCC climate ID.'
+    : b && !stationId(b) ? 'Station B needs its seven-character ECCC climate ID, or leave it blank.'
+    : rangeProblem(from,through);
+  if (problem) {
+    queryController?.abort();
+    queryController = null;
+    $('results').hidden = true;
+    $('status').textContent = problem;
     return;
   }
   queryController?.abort();
   const controller = new AbortController();
   queryController = controller;
-  const timer = setTimeout(()=>controller.abort(),27000);
   const parameters = {a,b,from,through};
   const current = new URL(location.href);
   current.search = new URLSearchParams(parameters).toString();
   history.replaceState(null,'',current);
   $('status').textContent = 'Loading station records, daily readings and climate normals…';
   $('results').hidden = true;
-  try {
-    const results = await Promise.all([...new Set([a,b].filter(Boolean))].map(id=>stationResult(id,from,through,controller.signal)));
-    if (queryController === controller) render(daysBetween(from,through),results);
-  } finally {
-    clearTimeout(timer);
-  }
+  const progress = new Map();
+  const results = await Promise.all([...new Set([a,b].filter(Boolean))].map(id=>
+    stationResult(id,from,through,controller.signal,count=>{
+      if (queryController !== controller) return;
+      progress.set(id,count);
+      $('status').textContent = 'Reading ECCC daily observations · '+Array.from(progress,([code,n])=>code+' ('+n+')').join(' · ');
+    })));
+  if (queryController === controller) render(daysBetween(from,through),results);
 }
 
 function setExample(a,b,from,through) {
@@ -259,6 +281,8 @@ for (const button of document.querySelectorAll('[data-point]')) {
     findNearby();
   });
 }
+$('daily-month').addEventListener('change',renderTable);
+$('full-year').addEventListener('click',()=>setExample('1104570','8202251','2024-01-01','2024-12-31'));
 $('csv').addEventListener('click',()=>{
   const url = URL.createObjectURL(new Blob([csvFor(visible.days,visible.results)],{type:'text/csv;charset=utf-8'}));
   const download = make('a');

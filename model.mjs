@@ -7,11 +7,43 @@ export const fields = [
 ];
 
 export const stationId = value => /^[A-Z0-9]{7}$/.test(value);
-export function validRange(from, through) {
+export function rangeProblem(from, through) {
   const start = new Date(from);
   const end = new Date(through);
-  const valid = (date, value) => Number.isFinite(+date) && date.toISOString().slice(0, 10) === value;
-  return valid(start, from) && valid(end, through) && end >= start && end - start < 92 * dayMs;
+  const valid = (date, value) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+    && Number.isFinite(+date) && date.toISOString().slice(0, 10) === value;
+  if (!valid(start, from) || !valid(end, through)) return 'Choose a valid start date and end date.';
+  if (end < start) return 'The end date must fall on or after the start date.';
+  const limit = new Date(start);
+  limit.setUTCFullYear(limit.getUTCFullYear() + 30);
+  if (end >= limit) return 'Choose up to 30 years per comparison. You can download consecutive ranges as CSV.';
+  return '';
+}
+
+export const validRange = (from, through) => !rangeProblem(from, through);
+
+export async function collectDailyPages(firstUrl, fetchPage, progress = () => {}) {
+  let url = new URL(firstUrl);
+  const seen = new Set();
+  const rows = [];
+  for (;;) {
+    if (seen.has(url.href)) throw new Error('ECCC repeated a page of daily observations.');
+    seen.add(url.href);
+    const page = await fetchPage(url);
+    rows.push(...page.features);
+    progress(rows.length);
+    const next = page.links?.find(link => link.rel === 'next');
+    if (!next) {
+      if (Number.isSafeInteger(page.numberMatched) && rows.length < page.numberMatched)
+        throw new Error('ECCC ended the download before all daily observations arrived.');
+      return rows;
+    }
+    const upcoming = new URL(next.href, url);
+    if (upcoming.origin !== climate.origin || upcoming.pathname !== url.pathname)
+      throw new Error('ECCC returned an unexpected daily observations link.');
+    upcoming.searchParams.set('f', 'json');
+    url = upcoming;
+  }
 }
 
 export function daysBetween(from, through) {
