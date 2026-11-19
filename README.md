@@ -8,3 +8,5 @@ Run locally with `python3 -m http.server` and open http://localhost:8000. The si
 - [ECCC Data Services End-use Licence](https://eccc-msc.github.io/open-data/licence/readme_en/)
 
 A station archive, including a series with a listed last observation date, may have missing values or changes in equipment. The CSV includes ECCC flags for the measurements displayed in the tool.
+
+[Forecast Receipt](https://coolcode.ca/forecastreceipt/) compares saved forecasts with hourly readings at Langley Regional and Halifax Stanfield.
